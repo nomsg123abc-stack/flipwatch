@@ -30,6 +30,21 @@ Everything runs on your machine. Your API keys, Facebook session and data never 
 
 ## Install
 
+### Linux AppImage
+
+Download `FlipWatch-x86_64.AppImage` from the project's Releases, then run:
+
+```bash
+chmod +x FlipWatch-x86_64.AppImage
+./FlipWatch-x86_64.AppImage
+```
+
+The AppImage includes its own Node.js runtime and opens FlipWatch in your browser. App data is stored in
+`~/.local/share/flipwatch` (or `$XDG_DATA_HOME/flipwatch`). To build it yourself on Linux x86_64, install
+Node.js 22 or newer and run `npm ci && npm run build:appimage`.
+
+### From source (macOS, Linux, or Windows)
+
 You need **Node.js 22 or newer** — get the LTS version from [nodejs.org](https://nodejs.org)
 (Windows: `winget install OpenJS.NodeJS.LTS`, macOS: `brew install node`).
 

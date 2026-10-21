@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "build": "next build",
+    "build:appimage": "bash packaging/appimage/build.sh",
     "start": "next start -H 127.0.0.1",
     "start:local": "next start -H 127.0.0.1 -p 3000",
     "lint": "eslint",

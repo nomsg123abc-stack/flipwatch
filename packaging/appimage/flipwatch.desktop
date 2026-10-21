@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FlipWatch
+Comment=Find underpriced deals on local marketplaces
+Exec=flipwatch
+Icon=flipwatch
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=true

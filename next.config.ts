@@ -40,6 +40,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { allowedOrigins: appUrlHost() },
   },
+  output: "standalone",
   images: {
     // Listing photos come from many marketplace CDNs; we render them with <img>, not next/image.
     unoptimized: true,

@@ -19,6 +19,8 @@
 
 # production
 /build
+/.build/
+/FlipWatch-*.AppImage
 
 # misc
 .DS_Store
