@@ -61,17 +61,31 @@ interface ChatResponse {
   error?: { message?: string; type?: string; code?: string };
 }
 
-function errorFor(status: number, body: ChatResponse | null): AiRequestError {
+function errorFor(status: number, body: ChatResponse | null, providerName: string): AiRequestError {
   const detail = body?.error?.message ? redactSecrets(body.error.message.replace(/\s+/g, " ")).slice(0, 160) : "";
-  if (status === 401) return new AiRequestError("OpenAI rejected the API key — check it in Settings → AI", { status });
-  if (status === 404) return new AiRequestError(`OpenAI doesn't know this model${detail ? `: ${detail}` : ""} — pick another in Settings → AI`, { status });
-  if (status === 429) return new AiRequestError(`OpenAI rate limit or quota reached${detail ? `: ${detail}` : ""}`, { status });
-  return new AiRequestError(`OpenAI API error ${status}${detail ? `: ${detail}` : ""}`, { status });
+  if (status === 401) return new AiRequestError(`${providerName} rejected the API key — check it in Settings → AI`, { status });
+  if (status === 404) return new AiRequestError(`${providerName} doesn't know this model${detail ? `: ${detail}` : ""} — pick another in Settings → AI`, { status });
+  if (status === 429) return new AiRequestError(`${providerName} rate limit or quota reached${detail ? `: ${detail}` : ""}`, { status });
+  return new AiRequestError(`${providerName} API error ${status}${detail ? `: ${detail}` : ""}`, { status });
+}
+
+/** Validate and normalize a base URL for an OpenAI Chat Completions-compatible service. */
+export function normalizeOpenAiBaseUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new Error("Enter a valid base URL, for example http://10.213.13.137:20128/v1.");
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password || url.search || url.hash) {
+    throw new Error("Use an http:// or https:// base URL without credentials, query parameters or a fragment.");
+  }
+  return url.toString().replace(/\/+$/, "");
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function createOpenAiClient(apiKey: string, fetchImpl: typeof fetch = fetch): AiClient {
+export function createOpenAiClient(apiKey: string, fetchImpl: typeof fetch = fetch, baseUrl = "https://api.openai.com/v1", providerName = "OpenAI"): AiClient {
   return {
     messages: {
       async create(body, options) {
@@ -81,7 +95,7 @@ export function createOpenAiClient(apiKey: string, fetchImpl: typeof fetch = fet
           const signals = [AbortSignal.timeout(TIMEOUT_MS), options?.signal].filter(Boolean) as AbortSignal[];
           let res: Response;
           try {
-            res = await fetchImpl(OPENAI_URL, {
+            res = await fetchImpl(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
               method: "POST",
               headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
               body: request,
@@ -95,7 +109,7 @@ export function createOpenAiClient(apiKey: string, fetchImpl: typeof fetch = fet
           }
           const json = (await res.json().catch(() => null)) as ChatResponse | null;
           if (!res.ok) {
-            lastError = errorFor(res.status, json);
+            lastError = errorFor(res.status, json, providerName);
             // Rate limits and server errors are worth retrying; a bad key or model is not.
             if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
               await sleep(1_000 * 2 ** attempt);

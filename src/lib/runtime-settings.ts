@@ -38,6 +38,8 @@ const settingsSchema = z
     aiProvider: z.enum(AI_PROVIDERS).optional(),
     anthropicApiKey: z.string().trim().max(500).optional(),
     openaiApiKey: z.string().trim().max(500).optional(),
+    customAiApiKey: z.string().trim().max(500).optional(),
+    customAiBaseUrl: z.string().trim().max(2_000).optional(),
     /** Model per provider; blank = that provider's default. */
     aiModels: z.partialRecord(z.enum(AI_PROVIDERS), z.union([z.literal(""), z.string().trim().regex(MODEL_NAME)])).optional(),
     facebookEnabled: z.boolean().optional(),
@@ -202,6 +204,8 @@ export interface PublicRuntimeSettings {
   aiProvider: AiProviderId | null;
   anthropicKey: string | null;
   openaiKey: string | null;
+  customAiKey: string | null;
+  customAiBaseUrl: string | null;
   aiModels: Partial<Record<AiProviderId, string>>;
   facebookEnabled: boolean;
   facebookConnected: boolean;
@@ -218,6 +222,8 @@ export function publicRuntimeSettings(s: RuntimeSettings = runtimeSettings()): P
     aiProvider: s.aiProvider ?? null,
     anthropicKey: maskSecret(s.anthropicApiKey),
     openaiKey: maskSecret(s.openaiApiKey),
+    customAiKey: maskSecret(s.customAiApiKey),
+    customAiBaseUrl: s.customAiBaseUrl ?? null,
     aiModels: s.aiModels ?? {},
     facebookEnabled: s.facebookEnabled === true,
     facebookConnected: storedFacebookAccounts(s).length > 0,

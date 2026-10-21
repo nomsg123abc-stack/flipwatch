@@ -16,18 +16,20 @@ export function AiEngineForm({ initial, onSaved }: { initial: PublicRuntimeSetti
   const [settings, setSettings] = useState(initial);
   const [provider, setProvider] = useState<AiProviderId>(initial.aiProvider ?? "anthropic");
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState(initial.customAiBaseUrl ?? "");
   const [model, setModel] = useState(initial.aiModels[initial.aiProvider ?? "anthropic"] ?? "");
   const [notice, setNotice] = useState<Notice>(null);
   const [saving, startSaving] = useTransition();
   const [testing, startTesting] = useTransition();
 
   const info = ENGINE_INFO[provider];
-  const savedKey = provider === "anthropic" ? settings.anthropicKey : provider === "openai" ? settings.openaiKey : null;
+  const savedKey = provider === "anthropic" ? settings.anthropicKey : provider === "openai" ? settings.openaiKey : provider === "custom" ? settings.customAiKey : null;
   const active = settings.aiProvider === provider;
 
   function choose(next: AiProviderId) {
     setProvider(next);
     setApiKey("");
+    setBaseUrl(settings.customAiBaseUrl ?? "");
     setModel(settings.aiModels[next] ?? "");
     setNotice(null);
   }
@@ -35,12 +37,13 @@ export function AiEngineForm({ initial, onSaved }: { initial: PublicRuntimeSetti
   function save(thenTest: boolean) {
     setNotice(null);
     startSaving(async () => {
-      const result = await saveAiSettingsAction({ provider, apiKey: apiKey || undefined, model });
+      const result = await saveAiSettingsAction({ provider, apiKey: apiKey || undefined, baseUrl: provider === "custom" ? baseUrl : undefined, model });
       if (!result.ok || !result.settings) {
         setNotice({ tone: "error", text: result.error ?? "Couldn't save." });
         return;
       }
       setSettings(result.settings);
+      setBaseUrl(result.settings.customAiBaseUrl ?? "");
       setApiKey("");
       onSaved?.();
       if (!thenTest) {
@@ -76,6 +79,21 @@ export function AiEngineForm({ initial, onSaved }: { initial: PublicRuntimeSetti
         ))}
       </fieldset>
 
+      {provider === "custom" ? (
+        <Field label="API base URL" htmlFor="custom-ai-url" hint="Use the provider's OpenAI-compatible base URL, such as http://10.213.13.137:20128/v1. The /chat/completions path is added automatically.">
+          <Input
+            id="custom-ai-url"
+            type="url"
+            autoComplete="url"
+            spellCheck={false}
+            placeholder="http://10.213.13.137:20128/v1"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            className="font-mono"
+          />
+        </Field>
+      ) : null}
+
       {info.needsKey ? (
         <Field
           label="API key"
@@ -99,7 +117,7 @@ export function AiEngineForm({ initial, onSaved }: { initial: PublicRuntimeSetti
               type="password"
               autoComplete="off"
               spellCheck={false}
-              placeholder={savedKey ? "•••••••• (saved)" : `${info.keyPrefix}…`}
+              placeholder={savedKey ? "•••••••• (saved)" : info.keyPrefix ? `${info.keyPrefix}…` : "API key"}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="pl-9 font-mono"
@@ -115,11 +133,11 @@ export function AiEngineForm({ initial, onSaved }: { initial: PublicRuntimeSetti
         </div>
       )}
 
-      <Field label="Model (optional)" htmlFor="ai-model" hint={info.modelHint}>
+      <Field label={provider === "custom" ? "Model" : "Model (optional)"} htmlFor="ai-model" hint={info.modelHint}>
         <Input
           id="ai-model"
           spellCheck={false}
-          placeholder={DEFAULT_MODELS[provider] || "Codex default"}
+          placeholder={DEFAULT_MODELS[provider] || (provider === "custom" ? "e.g. llama-3.3-70b" : "Codex default")}
           value={model}
           onChange={(e) => setModel(e.target.value)}
           className="font-mono"

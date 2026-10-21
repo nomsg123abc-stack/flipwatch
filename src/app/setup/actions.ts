@@ -6,6 +6,7 @@ import { aiStatus } from "@/lib/ai";
 import { MODEL_NAME } from "@/lib/ai/engines";
 import { getAiClient, resolveModel } from "@/lib/ai/client";
 import { toAiError } from "@/lib/ai/errors";
+import { normalizeOpenAiBaseUrl } from "@/lib/ai/openai";
 import { responseText } from "@/lib/ai/response";
 import { config } from "@/lib/config";
 import { getDb } from "@/lib/db";
@@ -52,6 +53,7 @@ const aiInput = z.object({
   provider: z.enum(AI_PROVIDERS),
   /** Only sent when the user typed a new key; blank keeps the saved one. */
   apiKey: z.string().trim().max(500).optional(),
+  baseUrl: z.string().trim().max(2_000).optional(),
   model: z
     .string()
     .trim()
@@ -63,18 +65,30 @@ export async function saveAiSettingsAction(input: z.input<typeof aiInput>): Prom
   await requireAuth();
   const parsed = aiInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid settings" };
-  const { provider, apiKey, model } = parsed.data;
+  const { provider, apiKey, baseUrl, model } = parsed.data;
+  if (provider === "custom" && !model) return { ok: false, error: "Enter the model name supported by your custom provider." };
   if (apiKey && provider === "anthropic" && !apiKey.startsWith("sk-ant-")) return { ok: false, error: "Claude API keys start with “sk-ant-”. Copy it from console.anthropic.com → API keys." };
   if (apiKey && provider === "openai" && !apiKey.startsWith("sk-")) return { ok: false, error: "OpenAI API keys start with “sk-”. Copy it from platform.openai.com → API keys." };
+  let normalizedBaseUrl: string | undefined;
+  if (provider === "custom" && baseUrl) {
+    try {
+      normalizedBaseUrl = normalizeOpenAiBaseUrl(baseUrl);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Enter a valid base URL." };
+    }
+  }
   try {
     const db = await getDb();
     const current = publicRuntimeSettings();
-    const needsKey = provider === "anthropic" ? !current.anthropicKey : provider === "openai" ? !current.openaiKey : false;
+    const needsKey = provider === "anthropic" ? !current.anthropicKey : provider === "openai" ? !current.openaiKey : provider === "custom" ? !current.customAiKey : false;
     if (needsKey && !apiKey) return { ok: false, error: "Paste your API key first." };
+    if (provider === "custom" && !normalizedBaseUrl) return { ok: false, error: "Enter the custom API base URL first." };
     const settings = await saveRuntimeSettings(db, {
       aiProvider: provider,
       ...(apiKey && provider === "anthropic" ? { anthropicApiKey: apiKey } : {}),
       ...(apiKey && provider === "openai" ? { openaiApiKey: apiKey } : {}),
+      ...(apiKey && provider === "custom" ? { customAiApiKey: apiKey } : {}),
+      ...(normalizedBaseUrl ? { customAiBaseUrl: normalizedBaseUrl } : {}),
       aiModels: { ...(current.aiModels ?? {}), [provider]: model ?? "" },
     });
     refresh();

@@ -4,7 +4,7 @@ import { DEFAULT_MODELS, PROVIDER_LABELS, type AiProviderId } from "./engines";
 import { createClaudeCliClient } from "./claude-cli";
 import { createCodexCliClient } from "./codex-cli";
 import { AiNotConfiguredError } from "./errors";
-import { createOpenAiClient } from "./openai";
+import { createOpenAiClient, normalizeOpenAiBaseUrl } from "./openai";
 
 export { DEFAULT_MODELS, PROVIDER_LABELS };
 /** Kept for callers and tests that predate multiple engines. */
@@ -42,6 +42,7 @@ export function createAnthropicClient(apiKey: string, overrides: Partial<ClientO
 function providerKey(provider: AiProviderId): string | undefined | null {
   if (provider === "anthropic") return config.anthropicApiKey;
   if (provider === "openai") return config.openaiApiKey;
+  if (provider === "custom") return config.customAiApiKey;
   return null;
 }
 
@@ -49,6 +50,7 @@ function providerKey(provider: AiProviderId): string | undefined | null {
 export function isAiConfigured(): boolean {
   if (factory) return Boolean(config.anthropicApiKey);
   const key = providerKey(config.aiProvider);
+  if (config.aiProvider === "custom") return Boolean(key && config.customAiBaseUrl);
   return key === null || Boolean(key);
 }
 
@@ -71,17 +73,19 @@ export function getAiClient(): AiClient {
   }
   const provider = config.aiProvider;
   const key = providerKey(provider);
-  if (key === undefined || key === "") throw new AiNotConfiguredError();
-  const id = `${provider}:${key ?? ""}`;
+  if (key === undefined || key === "" || (provider === "custom" && !config.customAiBaseUrl)) throw new AiNotConfiguredError();
+  const id = `${provider}:${key ?? ""}:${provider === "custom" ? config.customAiBaseUrl : ""}`;
   if (cached?.id !== id) {
     const client =
       provider === "anthropic"
         ? createAnthropicClient(key!)
         : provider === "openai"
           ? createOpenAiClient(key!)
-          : provider === "claude-cli"
-            ? createClaudeCliClient()
-            : createCodexCliClient();
+          : provider === "custom"
+            ? createOpenAiClient(key!, fetch, normalizeOpenAiBaseUrl(config.customAiBaseUrl!), "Custom provider")
+            : provider === "claude-cli"
+              ? createClaudeCliClient()
+              : createCodexCliClient();
     cached = { id, client };
   }
   return cached.client;

@@ -5,7 +5,7 @@ import { loadRuntimeSettings, maskSecret, publicRuntimeSettings, runtimeSettings
 import { config } from "../config";
 import { getAiClient, isAiConfigured, resolveModel } from "./client";
 import { codexArgs, codexError, OPTIONAL_DISABLED, REQUIRED_DISABLED, resolveCodexCommand, unknownFeatures } from "./codex-cli";
-import { createOpenAiClient, toChatRequest } from "./openai";
+import { createOpenAiClient, normalizeOpenAiBaseUrl, toChatRequest } from "./openai";
 import { responseText } from "./response";
 
 const body: Anthropic.MessageCreateParamsNonStreaming = {
@@ -75,6 +75,21 @@ describe("OpenAI engine", () => {
     expect(() => responseText(refused)).toThrow(/declined/);
     const message = await createOpenAiClient("x", fakeFetch({ status: 200, json: { choices: [{ finish_reason: "length", message: { content: '{"sc' } }] } }).impl).messages.create(body);
     expect(() => responseText(message)).toThrow(/cut off/);
+  });
+
+  it("sends requests to a normalized custom OpenAI-compatible base URL", async () => {
+    const { impl, calls } = fakeFetch({ status: 200, json: { choices: [{ message: { content: '{"score":80}' } }] } });
+    const baseUrl = normalizeOpenAiBaseUrl("http://10.213.13.137:20128/v1/");
+    await createOpenAiClient("custom-secret", impl, baseUrl, "Custom provider").messages.create(body);
+    expect(calls[0].url).toBe("http://10.213.13.137:20128/v1/chat/completions");
+    expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer custom-secret");
+  });
+
+  it("rejects invalid custom API base URLs", () => {
+    expect(normalizeOpenAiBaseUrl("http://10.0.0.1:9000/v1/")).toBe("http://10.0.0.1:9000/v1");
+    for (const url of ["", "not-a-url", "ftp://api.example.com/v1", "https://user:pass@example.com/v1", "https://api.example.com/v1?key=x", "https://api.example.com/v1#frag"]) {
+      expect(() => normalizeOpenAiBaseUrl(url)).toThrow();
+    }
   });
 });
 
@@ -157,5 +172,22 @@ describe("engine choice from saved settings", () => {
     await saveRuntimeSettings(db, { aiProvider: "codex-cli" });
     expect(isAiConfigured()).toBe(true);
     expect(resolveModel()).toBe("");
+
+    await saveRuntimeSettings(db, {
+      aiProvider: "custom",
+      customAiApiKey: "private-custom-key-123456789",
+      customAiBaseUrl: "http://10.213.13.137:20128/v1",
+      aiModels: { custom: "local-model" },
+    });
+    expect(config.aiProvider).toBe("custom");
+    expect(config.customAiApiKey).toBe("private-custom-key-123456789");
+    expect(config.customAiBaseUrl).toBe("http://10.213.13.137:20128/v1");
+    expect(resolveModel()).toBe("local-model");
+    expect(isAiConfigured()).toBe(true);
+    expect(getAiClient()).toBeDefined();
+    const customSettings = publicRuntimeSettings();
+    expect(customSettings.customAiKey).toBe(maskSecret("private-custom-key-123456789"));
+    expect(customSettings.customAiBaseUrl).toBe("http://10.213.13.137:20128/v1");
+    expect(JSON.stringify(customSettings)).not.toContain("private-custom-key-123456789");
   });
 });

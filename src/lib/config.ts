@@ -92,19 +92,25 @@ export const config = {
   get openaiApiKey() {
     return rt().openaiApiKey || str("OPENAI_API_KEY");
   },
+  get customAiApiKey() {
+    return rt().customAiApiKey;
+  },
+  get customAiBaseUrl() {
+    return rt().customAiBaseUrl;
+  },
   /** Model for the current provider: the one picked in Settings, else AI_MODEL, else the provider's default. */
   get aiModel() {
     return rt().aiModels?.[this.aiProvider] || str("AI_MODEL");
   },
   /**
-   * anthropic (Claude API key) | openai (OpenAI API key) | claude-cli / codex-cli (the user's own installed and
-   * signed-in Claude Code or Codex CLI). The Settings choice wins; else AI_PROVIDER; else whichever key is set.
+   * anthropic / openai / custom (API key) | claude-cli / codex-cli (the user's own installed and signed-in CLI).
+   * The Settings choice wins; else AI_PROVIDER; else whichever key is set.
    */
   get aiProvider(): AiProviderId {
     const chosen = rt().aiProvider;
     if (chosen) return chosen;
     const env = str("AI_PROVIDER");
-    if (env === "claude-cli" || env === "codex-cli" || env === "openai" || env === "anthropic") return env;
+    if (env === "claude-cli" || env === "codex-cli" || env === "openai" || env === "anthropic" || env === "custom") return env;
     if (!str("ANTHROPIC_API_KEY") && str("OPENAI_API_KEY")) return "openai";
     return "anthropic";
   },
